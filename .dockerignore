@@ -1,0 +1,10 @@
+.venv
+venv
+__pycache__
+*.pyc
+.git
+.gitignore
+samples
+*.raw
+*.html
+!static/*.html

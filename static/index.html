@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GLUTNN教务青春版 · 成绩 / 课表</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="login-view" class="login-wrap">
+  <section class="card login-card">
+    <h1>GLUTNN教务青春版</h1>
+    <p class="hint">凭据仅经本服务转发到学校系统，服务端不保存任何信息。</p>
+    <form id="login-form" autocomplete="on">
+      <label>学号
+        <input id="username" name="username" type="text" autocomplete="username" required>
+      </label>
+      <label>密码
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <label>验证码
+        <span class="captcha-row">
+          <input id="captcha" name="captcha" type="text" inputmode="numeric" autocomplete="off" maxlength="6" required>
+          <img id="captcha-img" alt="验证码" title="点击刷新">
+        </span>
+      </label>
+      <button type="submit" id="login-btn">登 录</button>
+      <div id="login-msg" class="msg"></div>
+    </form>
+  </section>
+</div>
+
+<div id="main-view" class="layout hidden">
+  <aside class="sidebar">
+    <div class="brand">GLUTNN教务青春版</div>
+
+    <div class="side-card" id="profile-card">
+      <div class="loading">加载个人信息…</div>
+    </div>
+
+    <div class="side-card" id="progress-card"></div>
+
+    <div class="side-card">
+      <h3>日历订阅</h3>
+      <input id="sub-url" readonly>
+      <div class="sub-actions">
+        <button id="copy-sub">复制链接</button>
+        <a id="webcal-link" class="btn-link" href="#">加入 Apple 日历</a>
+      </div>
+      <p class="tiny">订阅地址固定不变；学校会话过期后需在网页端重新登录即可恢复。</p>
+    </div>
+
+    <button id="logout" class="ghost full">退出登录</button>
+
+    <div class="disclaimer">
+      <div class="disclaimer-title">免责声明</div>
+      <ul>
+        <li>本页面数据均由原教务系统实时解析而来，仅供个人便捷查看。</li>
+        <li>一切信息<strong>以原教务系统页面为准</strong>，如有出入请以原系统为准。</li>
+        <li>导出的日历、成绩等请在原教务系统<strong>核对无误后</strong>再使用。</li>
+        <li>本工具与学校官方无关，使用风险自负。</li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <nav>
+        <button class="tab active" data-tab="schedule">课表</button>
+        <button class="tab" data-tab="grades">成绩</button>
+      </nav>
+      <span id="term-title" class="term"></span>
+      <span class="spacer"></span>
+      <button id="ics-btn" class="primary">导出 .ics</button>
+    </header>
+
+    <div id="tab-schedule" class="panel">
+      <div id="schedule-body"></div>
+    </div>
+
+    <div id="tab-grades" class="panel hidden">
+      <div class="toolbar">
+        <label>学年 <select id="grade-year"></select></label>
+        <label>学期 <select id="grade-term"></select></label>
+        <span id="grade-summary" class="term"></span>
+      </div>
+      <div id="grades-body"></div>
+    </div>
+  </main>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

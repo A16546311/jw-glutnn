@@ -1,0 +1,12 @@
+services:
+  jw-shell:
+    build: .
+    image: jw-shell:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # 生产环境请改成随机串；多副本/多 worker 必须一致，否则签名会话失效
+      SECRET_KEY: "please-change-me-to-a-random-string"
+      PORT: "8000"
+      TZ: "Asia/Shanghai"
+    restart: unless-stopped
