@@ -158,7 +158,7 @@ function renderProgress() {
 }
 
 function setupSub() {
-  const url = location.origin + "/api/schedule.ics?sub=" + encodeURIComponent(state.sub || "");
+  const url = location.origin + "/calendar/" + state.sub + ".ics";
   $("#sub-url").value = url;
   $("#webcal-link").href = url.replace(/^https?:/, "webcal:");
   $("#copy-sub").onclick = async () => {

@@ -16,8 +16,16 @@
 - **本学期进度**：按第 1 周周一推算当前周次与进度条。
 - **课表**：解析「本学期课表」，按大节作息渲染**按周格子视图**，可切换列表视图（周次自动展开）。
 - **成绩**：解析「课程成绩」，支持按学年 / 学期筛选，自动统计学分（绩点计算规则暂不明确，暂不计算）。
-- **日历导出**：生成 `.ics`（连续周次合并为 `RRULE`，单双周/断续周次自动拆段）。
-- **日历订阅**：稳定的订阅链接，可加入 Apple 日历。
+- **日历导出**：生成 `.ics`，默认**每次课一个事件**（兼容性最好、内容最直观）；加 `?mode=recur` 可将连续周次合并为 `RRULE`。
+- **日历订阅**：`/calendar/<令牌>.ics` 形式的稳定直链（以 `.ics` 结尾，便于日历客户端识别），可加入 Apple 日历。
+
+## 更新说明
+
+- **品牌**：界面更名「GLUTNN教务青春版」。
+- **订阅直链**：订阅地址由 `/api/schedule.ics?sub=…` 改为 `/calendar/<令牌>.ics`（以 `.ics` 结尾，Apple 日历可直接识别为订阅）。
+- **日历完整性**：`.ics` 默认改为**逐次展开**（每次课一个事件），不再依赖客户端的 RRULE 展开，避免"只有 30 个事件"的错觉；如需精简可加 `?mode=recur`。已与原系统「周次课表」逐条比对，88 条上课记录零缺失、零多余。
+- **成绩**：移除绩点计算（计算规则暂不明确），仅统计学分。
+- **左侧栏**：新增个人信息（学籍信息）、本学期进度、日历订阅与免责声明。
 
 ## 快速开始
 
@@ -76,7 +84,7 @@ jw-shell/
 |---|---|
 | `school.py` | 会话管理、验证码、登录、菜单解析、`accessModule` 跳转、抓取课表/成绩/学籍、求学期第 1 周周一 |
 | `parser.py` | `parse_schedule` / `parse_grades` / `parse_profile`；`parse_weeks` 周次展开；`BIG_PERIODS` 大节作息 |
-| `ics.py` | `build_ics`：按大节时间与周次生成 VEVENT（RRULE 合并连续周） |
+| `ics.py` | `build_ics`：按大节时间与周次生成 VEVENT；`expand=True` 逐次生成，`expand=False` 用 RRULE 合并连续周 |
 | `app.py` | `/api/*` 接口；签名会话；订阅令牌与内存会话表 |
 
 ### 接口
@@ -88,8 +96,8 @@ jw-shell/
 | GET | `/api/profile?session=` | 个人信息 |
 | GET | `/api/schedule?session=` | 课表（含大节表、学期锚点） |
 | GET | `/api/grades?session=` | 成绩列表 |
-| GET | `/api/schedule.ics?session=` | 下载 .ics |
-| GET | `/api/schedule.ics?sub=` | 订阅用 .ics（稳定令牌） |
+| GET | `/api/schedule.ics?session=` | 下载 .ics（加 `&mode=recur` 用 RRULE 合并） |
+| GET | `/calendar/<token>.ics` | **订阅直链**（稳定令牌，以 .ics 结尾） |
 
 ---
 

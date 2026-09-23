@@ -51,7 +51,12 @@ def _fold(line: str) -> str:
     return "\r\n ".join(out)
 
 
-def build_ics(courses, big_periods, anchor_monday, cal_name: str = "课程表") -> str:
+def build_ics(courses, big_periods, anchor_monday, cal_name: str = "课程表", expand: bool = True) -> str:
+    """生成 ICS。
+
+    expand=True（默认）：每次课单独一个 VEVENT，兼容性最好、内容最直观；
+    expand=False：连续周次用 RRULE:FREQ=WEEKLY;COUNT=n 合并，文件更小。
+    """
     by_index = {p["index"]: p for p in big_periods}
     events = []
 
@@ -68,7 +73,8 @@ def build_ics(courses, big_periods, anchor_monday, cal_name: str = "课程表") 
             sh, sm = [int(x) for x in start.split(":")]
             eh, em = [int(x) for x in end.split(":")]
 
-            for run in _runs(meeting["weeks"]):
+            groups = [[w] for w in sorted(set(meeting["weeks"]))] if expand else _runs(meeting["weeks"])
+            for run in groups:
                 d0 = anchor_monday + timedelta(weeks=run[0] - 1, days=meeting["day"] - 1)
                 dtstart = datetime(d0.year, d0.month, d0.day, sh, sm)
                 dtend = datetime(d0.year, d0.month, d0.day, eh, em)

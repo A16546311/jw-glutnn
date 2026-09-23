@@ -155,9 +155,7 @@ def api_grades():
         return jsonify({"error": "获取成绩失败：%s" % exc}), 502
 
 
-@app.get("/api/schedule.ics")
-def api_schedule_ics():
-    js = resolve_session()
+def _ics_response(js):
     if not js:
         return jsonify({"error": "会话已过期，请在网页端重新登录后再订阅"}), 401
     try:
@@ -167,7 +165,11 @@ def api_schedule_ics():
             anchor = school.semester_anchor(js, data["yearid"], data["termid"])
         if not anchor:
             return jsonify({"error": "无法确定学期起始日期，无法生成日历"}), 400
-        body = ics.build_ics(data["courses"], data["bigPeriods"], anchor, cal_name=data.get("term") or "课程表")
+        expand = request.args.get("mode") != "recur"
+        body = ics.build_ics(
+            data["courses"], data["bigPeriods"], anchor,
+            cal_name=data.get("term") or "课程表", expand=expand,
+        )
     except school.SessionExpired as exc:
         return jsonify({"error": str(exc)}), 401
     return Response(
@@ -175,6 +177,17 @@ def api_schedule_ics():
         mimetype="text/calendar; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=schedule.ics"},
     )
+
+
+@app.get("/api/schedule.ics")
+def api_schedule_ics():
+    return _ics_response(resolve_session())
+
+
+@app.get("/calendar/<token>.ics")
+def calendar_ics(token):
+    """订阅直链：路径以 .ics 结尾，便于日历客户端识别。"""
+    return _ics_response(recall(unpack_sub(token)))
 
 
 if __name__ == "__main__":

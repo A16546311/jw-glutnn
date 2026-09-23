@@ -109,6 +109,14 @@ def cmd_sub():
     print("subscription url path: /api/schedule.ics?sub=" + load_session())
 
 
+def cmd_calendar():
+    sub = open("/tmp/sub.txt").read().strip()
+    body = _get("/calendar/" + sub + ".ics")
+    with open("/tmp/calendar.ics", "wb") as fh:
+        fh.write(body)
+    print("calendar/<sub>.ics: %d bytes, VEVENT=%d" % (len(body), body.count(b"BEGIN:VEVENT")))
+
+
 def cmd_ics_sub():
     sub = open("/tmp/sub.txt").read().strip()
     q = urllib.parse.urlencode({"sub": sub})
@@ -137,6 +145,8 @@ if __name__ == "__main__":
         cmd_profile()
     elif action == "ics-sub":
         cmd_ics_sub()
+    elif action == "calendar":
+        cmd_calendar()
     else:
         print(__doc__)
         sys.exit(1)
