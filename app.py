@@ -16,6 +16,7 @@ from itsdangerous import URLSafeSerializer
 import ics
 import parser
 import school
+import updater
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -188,6 +189,20 @@ def api_schedule_ics():
 def calendar_ics(token):
     """订阅直链：路径以 .ics 结尾，便于日历客户端识别。"""
     return _ics_response(recall(unpack_sub(token)))
+
+
+@app.get("/api/update/check")
+def api_update_check():
+    return jsonify(updater.check())
+
+
+@app.post("/api/update/apply")
+def api_update_apply():
+    if updater.TOKEN:
+        provided = request.args.get("token") or request.headers.get("X-Update-Token", "")
+        if provided != updater.TOKEN:
+            return jsonify({"ok": False, "error": "更新令牌不正确"}), 403
+    return jsonify(updater.apply())
 
 
 if __name__ == "__main__":

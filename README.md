@@ -18,10 +18,12 @@
 - **成绩**：解析「课程成绩」，支持按学年 / 学期筛选，自动统计学分（绩点计算规则暂不明确，暂不计算）。
 - **日历导出**：生成 `.ics`，默认**每次课一个事件**（兼容性最好、内容最直观）；加 `?mode=recur` 可将连续周次合并为 `RRULE`。
 - **日历订阅**：`/calendar/<令牌>.ics` 形式的稳定直链（以 `.ics` 结尾，便于日历客户端识别），可加入 Apple 日历。
+- **OTA 自更新**：侧栏可检查版本并从远程仓库一键拉取更新（自动备份、热重载）。
 
 ## 更新说明
 
 - **更名**：界面更名「GLUTNN教务青春版」。
+- **OTA 自更新**：新增 `/api/update/check` 与 `/api/update/apply`，侧栏可一键从远程仓库拉取新版本（下载分支 tarball 覆盖代码、保留 `docker-compose.yml`/`.env`、备份到 `.ota_backup`、必要时重装依赖后热重载）。
 - **订阅直链**：订阅地址由 `/api/schedule.ics?sub=…` 改为 `/calendar/<令牌>.ics`（以 `.ics` 结尾，Apple 日历可直接识别为订阅）。
 - **日历完整性**：`.ics` 默认改为**逐次展开**（每次课一个事件），不再依赖客户端的 RRULE 展开，避免"只有 30 个事件"的错觉；如需精简可加 `?mode=recur`。已与原系统「周次课表」逐条比对，88 条上课记录零缺失、零多余。
 - **成绩**：移除绩点计算（计算规则暂不明确），仅统计学分。
@@ -54,6 +56,12 @@ python app.py            # 监听 0.0.0.0:8000
 | `SECRET_KEY` | `dev-insecure-secret-change-me` | 会话签名密钥，**生产必须修改**；多 worker/多副本需一致 |
 | `PORT` | `8000` | 监听端口（`python app.py` 时生效） |
 | `TZ` | `Asia/Shanghai` | 时区 |
+| `UPDATE_REPO` | `A16546311/jw-glutnn` | OTA 远程仓库（`owner/name`） |
+| `UPDATE_BRANCH` | `main` | OTA 拉取分支 |
+| `UPDATE_ENABLED` | `1` | 置 `0` 关闭 OTA 更新 |
+| `UPDATE_TOKEN` | 空 | 若设置，执行更新需带 `X-Update-Token` 或 `?token=` |
+
+> OTA 依赖远程仓库中的 `VERSION` 文件判定版本：**发版时请递增 `VERSION`**。
 
 ---
 
@@ -65,6 +73,8 @@ jw-shell/
 ├── school.py               与教务系统交互（登录、菜单、课表、成绩、学籍、周次锚点）
 ├── parser.py               HTML 解析（课表 / 成绩 / 个人信息、周次展开、大节映射）
 ├── ics.py                  iCalendar(.ics) 生成
+├── updater.py              OTA 自更新（检查 / 拉取 / 备份 / 热重载）
+├── VERSION                 版本号（发版时递增）
 ├── static/
 │   ├── index.html          单页界面
 │   ├── app.js              前端逻辑（登录、格子课表、成绩、侧栏）
@@ -86,6 +96,7 @@ jw-shell/
 | `parser.py` | `parse_schedule` / `parse_grades` / `parse_profile`；`parse_weeks` 周次展开；`BIG_PERIODS` 大节作息 |
 | `ics.py` | `build_ics`：按大节时间与周次生成 VEVENT；`expand=True` 逐次生成，`expand=False` 用 RRULE 合并连续周 |
 | `app.py` | `/api/*` 接口；签名会话；订阅令牌与内存会话表 |
+| `updater.py` | OTA：比较 `VERSION`、下载分支 tarball 覆盖、备份、pip 安装、`SIGHUP`/`execv` 热重载 |
 
 ### 接口
 
@@ -98,6 +109,8 @@ jw-shell/
 | GET | `/api/grades?session=` | 成绩列表 |
 | GET | `/api/schedule.ics?session=` | 下载 .ics（加 `&mode=recur` 用 RRULE 合并） |
 | GET | `/calendar/<token>.ics` | **订阅直链**（稳定令牌，以 .ics 结尾） |
+| GET | `/api/update/check` | 检查本地 / 远端版本 |
+| POST | `/api/update/apply` | 从远程仓库拉取并更新（完成后自动重启） |
 
 ---
 
@@ -111,6 +124,15 @@ jw-shell/
    第1-2节 08:40–10:05 / 第3-4节 10:25–11:50 / 第5-6节 14:30–15:55 / 第7-8节 16:05–17:30 / 第9-10节 19:30–20:55。
 6. **学期锚点**：由 `studentWeeklyTimetable.do` 逐周探测最早日期反推第 1 周周一，用于把周次换算成真实日期。
 7. **订阅链接**：`sub` 为绑定用户名的签名令牌，指向**内存**中的学校会话（TTL 8 小时）。因登录需验证码，服务端无法自动续登；学校会话过期后，在网页端重新登录即可让同一订阅链接恢复。
+
+## OTA 自更新
+
+1. 侧栏「版本更新」→「检查更新」：比较本地 `VERSION` 与远程仓库 raw `VERSION`。
+2. 「立即更新」：下载分支 tarball 覆盖应用目录（保留 `docker-compose.yml`、`.env`），旧代码备份到 `.ota_backup/`，必要时 `pip install -r requirements.txt`，随后热重载（gunicorn 向 master 发 `SIGHUP`，其它情况 `os.execv` 自重启）。
+3. **发版流程**：修改代码后**递增 `VERSION`** 并推送，客户端即可检测到新版本。
+4. Docker 部署已内置 `restart: unless-stopped`，热重载异常时可自动重启容器。
+
+> 安全：更新会执行远程仓库中的代码，请确保仓库可控；多用户部署建议设置 `UPDATE_TOKEN`。
 
 ## 免责声明
 

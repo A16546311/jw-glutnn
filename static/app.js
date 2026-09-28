@@ -70,6 +70,7 @@ function showMain() {
   setupSub();
   loadProfile();
   loadSchedule();
+  checkUpdate();
 }
 
 $("#logout").addEventListener("click", () => {
@@ -172,6 +173,58 @@ function setupSub() {
     }
   };
 }
+
+/* ---------- 版本更新 ---------- */
+
+async function checkUpdate() {
+  const el = $("#update-info");
+  el.textContent = "检查中…";
+  $("#apply-update").classList.add("hidden");
+  try {
+    const d = await api("/api/update/check");
+    if (d.enabled === false) {
+      el.textContent = "更新功能未启用";
+      return;
+    }
+    if (d.error) {
+      el.textContent = d.error;
+      return;
+    }
+    let text = "当前 v" + (d.local || "?") + " · 远端 v" + (d.remote || "?");
+    if (d.update_available) {
+      text += "（发现新版本）";
+      $("#apply-update").classList.remove("hidden");
+    } else {
+      text += "（已是最新）";
+    }
+    if (d.message) {
+      text += "\n最新提交：" + d.message;
+    }
+    el.textContent = text;
+  } catch (err) {
+    el.textContent = "检查更新失败：" + err.message;
+  }
+}
+
+async function applyUpdate() {
+  if (!window.confirm("确定从远程仓库拉取并更新？更新后服务会自动重启，稍后请刷新页面。")) return;
+  const btn = $("#apply-update");
+  const el = $("#update-info");
+  btn.disabled = true;
+  el.textContent = "正在拉取更新…";
+  try {
+    const d = await api("/api/update/apply", { method: "POST" });
+    if (!d.ok) throw new Error(d.error || "更新失败");
+    el.textContent = "更新完成（" + d.files + " 个文件），服务重启中…";
+    setTimeout(() => location.reload(), 7000);
+  } catch (err) {
+    el.textContent = "更新失败：" + err.message;
+    btn.disabled = false;
+  }
+}
+
+$("#check-update").addEventListener("click", checkUpdate);
+$("#apply-update").addEventListener("click", applyUpdate);
 
 /* ---------- Tab ---------- */
 
