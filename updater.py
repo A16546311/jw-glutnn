@@ -166,14 +166,24 @@ def _pip_install():
 
 def _restart():
     time.sleep(1.5)
-    try:
-        argv0 = os.path.basename(sys.argv[0] or "")
-        if "gunicorn" in argv0:
+    argv0 = os.path.basename(sys.argv[0] or "")
+    if "gunicorn" in argv0:
+        try:
             os.kill(os.getppid(), signal.SIGHUP)  # 让 gunicorn master 热重载 worker
-        else:
-            os.execv(sys.executable, [sys.executable] + sys.argv)  # 自重启
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    # 非 gunicorn：另起一个独立进程（延迟 1s 待端口释放），随后退出自身
+    try:
+        subprocess.Popen(
+            ["bash", "-c", 'sleep 1; exec "$@"', "_", sys.executable, *sys.argv],
+            cwd=os.getcwd(),
+            start_new_session=True,
+            close_fds=True,
+        )
     except Exception:  # noqa: BLE001
-        os._exit(0)
+        pass
+    os._exit(0)
 
 
 def _finish():
