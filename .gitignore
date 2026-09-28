@@ -1,0 +1,8 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+samples/
+.ota_state.json
+.ota_backup/
+*.raw
