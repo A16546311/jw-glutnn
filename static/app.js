@@ -180,6 +180,7 @@ async function checkUpdate() {
   const el = $("#update-info");
   el.textContent = "检查中…";
   $("#apply-update").classList.add("hidden");
+  $("#rollback-update").classList.add("hidden");
   try {
     const d = await api("/api/update/check");
     if (d.enabled === false) {
@@ -190,6 +191,7 @@ async function checkUpdate() {
       el.textContent = d.error;
       return;
     }
+    if (d.backup_available) $("#rollback-update").classList.remove("hidden");
     let text = "当前 v" + (d.local || "?") + " · 远端 v" + (d.remote || "?");
     if (d.update_available) {
       text += "（发现新版本）";
@@ -223,8 +225,25 @@ async function applyUpdate() {
   }
 }
 
+async function rollbackUpdate() {
+  if (!window.confirm("确定回滚到更新前的版本？服务会自动重启。")) return;
+  const el = $("#update-info");
+  $("#rollback-update").disabled = true;
+  el.textContent = "正在回滚…";
+  try {
+    const d = await api("/api/update/rollback", { method: "POST" });
+    if (!d.ok) throw new Error(d.error || "回滚失败");
+    el.textContent = "回滚完成，服务重启中…";
+    setTimeout(() => location.reload(), 7000);
+  } catch (err) {
+    el.textContent = "回滚失败：" + err.message;
+    $("#rollback-update").disabled = false;
+  }
+}
+
 $("#check-update").addEventListener("click", checkUpdate);
 $("#apply-update").addEventListener("click", applyUpdate);
+$("#rollback-update").addEventListener("click", rollbackUpdate);
 
 /* ---------- Tab ---------- */
 

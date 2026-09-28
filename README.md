@@ -18,7 +18,7 @@
 - **成绩**：解析「课程成绩」，支持按学年 / 学期筛选，自动统计学分（绩点计算规则暂不明确，暂不计算）。
 - **日历导出**：生成 `.ics`，默认**每次课一个事件**（兼容性最好、内容最直观）；加 `?mode=recur` 可将连续周次合并为 `RRULE`。
 - **日历订阅**：`/calendar/<令牌>.ics` 形式的稳定直链（以 `.ics` 结尾，便于日历客户端识别），可加入 Apple 日历。
-- **OTA 自更新**：侧栏可检查版本并从远程仓库一键拉取更新（自动备份、热重载）。
+- **OTA 自更新**：侧栏可检查版本、一键从远程仓库拉取更新，并支持从备份回滚（自动备份、热重载）。
 
 ## 更新说明
 
@@ -111,6 +111,8 @@ jw-shell/
 | GET | `/calendar/<token>.ics` | **订阅直链**（稳定令牌，以 .ics 结尾） |
 | GET | `/api/update/check` | 检查本地 / 远端版本 |
 | POST | `/api/update/apply` | 从远程仓库拉取并更新（完成后自动重启） |
+| POST | `/api/update/rollback` | 从 `.ota_backup` 回滚到更新前版本 |
+| GET | `/api/health` | 健康检查（返回版本，供容器 HEALTHCHECK 用） |
 
 ---
 
@@ -130,7 +132,8 @@ jw-shell/
 1. 侧栏「版本更新」→「检查更新」：比较本地 `VERSION` 与远程仓库 raw `VERSION`。
 2. 「立即更新」：下载分支 tarball 覆盖应用目录（保留 `docker-compose.yml`、`.env`），旧代码备份到 `.ota_backup/`，必要时 `pip install -r requirements.txt`，随后热重载（gunicorn 向 master 发 `SIGHUP`，其它情况 `os.execv` 自重启）。
 3. **发版流程**：修改代码后**递增 `VERSION`** 并推送，客户端即可检测到新版本。
-4. Docker 部署已内置 `restart: unless-stopped`，热重载异常时可自动重启容器。
+4. **回滚**：更新前代码会备份到 `.ota_backup/`，侧栏「回滚」或 `POST /api/update/rollback` 可还原。
+5. Docker 部署已内置 `restart: unless-stopped` 与 `HEALTHCHECK`（`/api/health`），热重载异常时可自动重启容器。
 
 > 安全：更新会执行远程仓库中的代码，请确保仓库可控；多用户部署建议设置 `UPDATE_TOKEN`。
 

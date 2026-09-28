@@ -84,6 +84,11 @@ def index():
     return app.send_static_file("index.html")
 
 
+@app.get("/api/health")
+def api_health():
+    return jsonify({"ok": True, "version": updater.local_version()})
+
+
 @app.get("/api/captcha")
 def api_captcha():
     js, image = school.get_captcha()
@@ -203,6 +208,15 @@ def api_update_apply():
         if provided != updater.TOKEN:
             return jsonify({"ok": False, "error": "更新令牌不正确"}), 403
     return jsonify(updater.apply())
+
+
+@app.post("/api/update/rollback")
+def api_update_rollback():
+    if updater.TOKEN:
+        provided = request.args.get("token") or request.headers.get("X-Update-Token", "")
+        if provided != updater.TOKEN:
+            return jsonify({"ok": False, "error": "更新令牌不正确"}), 403
+    return jsonify(updater.rollback())
 
 
 if __name__ == "__main__":

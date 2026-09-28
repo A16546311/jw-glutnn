@@ -8,6 +8,7 @@
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -49,6 +50,17 @@ def local_version():
         return "unknown"
 
 
+def _ver_tuple(value):
+    return tuple(int(x) for x in re.findall(r"\d+", value or ""))
+
+
+def _is_newer(remote, local):
+    """remote 是否比 local 新；local 未知时视为需要更新。"""
+    if not local or local == "unknown":
+        return True
+    return _ver_tuple(remote) > _ver_tuple(local)
+
+
 def _remote_version():
     req = urllib.request.Request(RAW_VERSION + "?t=%d" % time.time(), headers=_UA)
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -73,12 +85,18 @@ def _remote_commit():
 
 def check():
     """返回本地/远端版本与是否有更新。"""
-    result = {"enabled": ENABLED, "repo": REPO, "branch": BRANCH, "local": local_version()}
+    result = {
+        "enabled": ENABLED,
+        "repo": REPO,
+        "branch": BRANCH,
+        "local": local_version(),
+        "backup_available": os.path.isdir(BACKUP_DIR) and bool(os.listdir(BACKUP_DIR)),
+    }
     if not ENABLED:
         return result
     try:
         result["remote"] = _remote_version()
-        result["update_available"] = result["remote"] != result["local"]
+        result["update_available"] = _is_newer(result["remote"], result["local"])
     except Exception as exc:  # noqa: BLE001
         result["error"] = "无法获取远程版本：%s" % exc
         return result
@@ -162,6 +180,38 @@ def _finish():
     time.sleep(1.0)
     _pip_install()
     _restart()
+
+
+def _restore_from(src_dir):
+    """把备份目录内容覆盖回应用目录，返回条目数。"""
+    count = 0
+    for name in os.listdir(src_dir):
+        if name in SKIP_DIRS or name in SKIP_FILES:
+            continue
+        src = os.path.join(src_dir, name)
+        dest = os.path.join(APP_DIR, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*SKIP_DIRS))
+        else:
+            shutil.copy2(src, dest)
+        count += 1
+    return count
+
+
+def rollback():
+    """从上次更新前的备份回滚并重启。"""
+    if not os.path.isdir(BACKUP_DIR) or not os.listdir(BACKUP_DIR):
+        return {"ok": False, "error": "没有可用的备份"}
+    if not _lock.acquire(blocking=False):
+        return {"ok": False, "error": "已有更新正在进行"}
+    try:
+        count = _restore_from(BACKUP_DIR)
+        threading.Thread(target=_finish, daemon=True).start()
+        return {"ok": True, "restored": count}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    finally:
+        _lock.release()
 
 
 def apply():

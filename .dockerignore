@@ -5,8 +5,6 @@ __pycache__
 .git
 .gitignore
 samples
-.ota_state.json
-.ota_backup
 *.raw
 *.html
 !static/*.html
