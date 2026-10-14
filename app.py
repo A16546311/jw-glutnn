@@ -6,6 +6,7 @@
 """
 
 import base64
+import datetime
 import os
 import threading
 import time
@@ -128,19 +129,29 @@ def api_profile():
         return jsonify({"error": "获取个人信息失败：%s" % exc}), 502
 
 
+def _load_schedule(js):
+    """抓取课表并应用调课修正，返回结构化数据。"""
+    html, grid = school.fetch_schedule_bundle(js)
+    data = parser.parse_schedule(html)
+    if grid:
+        parser.apply_adjustments(data, parser.parse_adjustments(grid))
+    else:
+        data["adjustments"] = []
+    data["anchorMonday"] = None
+    if data.get("yearid") and data.get("termid"):
+        anchor = school.semester_anchor(js, data["yearid"], data["termid"])
+        if anchor:
+            data["anchorMonday"] = anchor.isoformat()
+    return data
+
+
 @app.get("/api/schedule")
 def api_schedule():
     js = unpack(request.args.get("session"))
     if not js:
         return jsonify({"error": "会话已失效，请重新登录"}), 401
     try:
-        data = parser.parse_schedule(school.fetch_schedule(js))
-        data["anchorMonday"] = None
-        if data.get("yearid") and data.get("termid"):
-            anchor = school.semester_anchor(js, data["yearid"], data["termid"])
-            if anchor:
-                data["anchorMonday"] = anchor.isoformat()
-        return jsonify(data)
+        return jsonify(_load_schedule(js))
     except school.SessionExpired as exc:
         return jsonify({"error": str(exc)}), 401
     except Exception as exc:  # noqa: BLE001
@@ -165,10 +176,10 @@ def _ics_response(js):
     if not js:
         return jsonify({"error": "会话已过期，请在网页端重新登录后再订阅"}), 401
     try:
-        data = parser.parse_schedule(school.fetch_schedule(js))
+        data = _load_schedule(js)
         anchor = None
-        if data.get("yearid") and data.get("termid"):
-            anchor = school.semester_anchor(js, data["yearid"], data["termid"])
+        if data.get("anchorMonday"):
+            anchor = datetime.date.fromisoformat(data["anchorMonday"])
         if not anchor:
             return jsonify({"error": "无法确定学期起始日期，无法生成日历"}), 400
         expand = request.args.get("mode") != "recur"

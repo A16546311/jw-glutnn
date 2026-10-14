@@ -304,3 +304,144 @@ def parse_profile(html: str):
         profile["学号"] = profile.get("学号") or m.group(2)
     return profile
 
+
+# ---------- 调课信息（个人课表底部「停/代课时间地点 / 补课时间地点」） ----------
+
+def _adj_slot(cells):
+    """cells = [日期, 周, 星期, 节次, 教室]，无有效时段返回 None。"""
+    if len(cells) < 5:
+        return None
+    date, week, daytext, periodtext, room = cells[:5]
+    week_num = int(week) if week and week.isdigit() else None
+    day = parse_day(daytext)
+    period = parse_period(periodtext)
+    if not (week_num and day and period):
+        return None
+    if room in ("&nbsp;", "\xa0"):
+        room = ""
+    return {"date": date, "week": week_num, "day": day, "period": period, "room": room}
+
+
+def parse_adjustments(grid_html):
+    """解析个人课表页底部的「调课信息」表，返回调课记录列表。
+
+    每行字段：类型 课程号 课程名 课序号 教师姓名 代课人 学时，
+    随后两组各 5 列：日期 周 星期 节次 教室（先「停/代课」，后「补课」）。
+    """
+    if not grid_html:
+        return []
+    soup = BeautifulSoup(grid_html, "lxml")
+    table = None
+    for t in soup.find_all("table"):
+        if "停/代课时间地点" in t.get_text():
+            table = t
+            break
+    if table is None:
+        return []
+
+    adjustments = []
+    last_meta = None
+    for tr in table.find_all("tr"):
+        tds = tr.find_all("td")
+        if not tds:
+            continue
+        vals = [_norm(td.get_text()) for td in tds]
+        if len(vals) >= 17:
+            meta = vals[:7]
+            slots = vals[7:17]
+            last_meta = meta
+        elif len(vals) >= 10:
+            meta = last_meta or [""] * 7
+            slots = vals[-10:]
+        else:
+            continue
+        stop = _adj_slot(slots[0:5])
+        make = _adj_slot(slots[5:10])
+        if not stop and not make:
+            continue
+        adjustments.append({
+            "type": meta[0],
+            "code": meta[1],
+            "name": meta[2],
+            "seq": meta[3],
+            "teacher": meta[4],
+            "substitute": meta[5],
+            "hours": meta[6],
+            "stop": stop,
+            "make": make,
+        })
+    return adjustments
+
+
+def _refresh_meeting(meeting):
+    meeting["weeks"] = sorted(set(meeting["weeks"]))
+    meeting["weeksText"] = ",".join(str(w) for w in meeting["weeks"])
+    meeting["weeksReadable"] = expand_weeks_text(meeting["weeks"])
+    meeting["weekCount"] = len(meeting["weeks"])
+
+
+def _same_slot(meeting, slot):
+    return (meeting.get("day") == slot["day"]
+            and (meeting.get("period") or {}).get("text") == slot["period"]["text"])
+
+
+def apply_adjustments(data, adjustments):
+    """应用调课：移除「停/代课」时段，加入「补课」时段（代课仅替换教师）。"""
+    if not adjustments:
+        data["adjustments"] = []
+        return data
+    courses = data.get("courses", [])
+    by_code = {c["code"]: c for c in courses if c.get("code")}
+    by_name = {c["name"]: c for c in courses if c.get("name")}
+    applied = []
+    for adj in adjustments:
+        course = by_code.get(adj["code"]) or by_name.get(adj["name"])
+        if course is None:
+            continue
+        stop = adj.get("stop")
+        make = adj.get("make")
+        atype = adj.get("type", "")
+
+        if atype == "代课" and stop and adj.get("substitute"):
+            for m in course["meetings"]:
+                if _same_slot(m, stop) and stop["week"] in m["weeks"]:
+                    m["substitute"] = adj["substitute"]
+            applied.append(adj)
+            continue
+
+        if stop:
+            for m in course["meetings"]:
+                if _same_slot(m, stop) and stop["week"] in m["weeks"]:
+                    m["weeks"].remove(stop["week"])
+            course["meetings"] = [m for m in course["meetings"] if m["weeks"]]
+            for m in course["meetings"]:
+                _refresh_meeting(m)
+
+        if make:
+            merged = False
+            for m in course["meetings"]:
+                if _same_slot(m, make) and m.get("room") == make.get("room"):
+                    if make["week"] not in m["weeks"]:
+                        m["weeks"].append(make["week"])
+                        _refresh_meeting(m)
+                    merged = True
+                    break
+            if not merged:
+                bs, be = big_period_range(make["period"])
+                course["meetings"].append({
+                    "weeksText": str(make["week"]),
+                    "weeks": [make["week"]],
+                    "weeksReadable": expand_weeks_text([make["week"]]),
+                    "weekCount": 1,
+                    "day": make["day"],
+                    "dayName": DAY_NAME.get(make["day"], ""),
+                    "period": make["period"],
+                    "bigIndex": bs,
+                    "bigEndIndex": be,
+                    "room": make["room"],
+                    "fromAdjust": True,
+                })
+        applied.append(adj)
+    data["adjustments"] = applied
+    return data
+

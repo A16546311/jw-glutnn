@@ -158,6 +158,30 @@ def fetch_schedule(jsessionid: str) -> str:
     return decode(open_module(s, MODULE_SCHEDULE))
 
 
+GRID_URL_RE = re.compile(
+    r"\.\./\.\./manager/coursearrange/showTimetable\.do\?[^'\"]+"
+)
+
+
+def fetch_schedule_bundle(jsessionid: str):
+    """返回 (课表页 HTML, 个人课表页 HTML)。
+
+    课表页含课程列表；个人课表页底部含「调课信息」（停/代课、补课）。
+    """
+    s = new_session(jsessionid)
+    schedule_html = decode(open_module(s, MODULE_SCHEDULE))
+    grid_html = None
+    m = GRID_URL_RE.search(schedule_html)
+    if m:
+        path = m.group(0).replace("../../", "/academic/")
+        try:
+            r = s.get(BASE + path, timeout=TIMEOUT)
+            grid_html = decode(r)
+        except requests.RequestException:
+            grid_html = None
+    return schedule_html, grid_html
+
+
 def fetch_profile(jsessionid: str) -> str:
     s = new_session(jsessionid)
     return decode(open_module(s, MODULE_PROFILE))
